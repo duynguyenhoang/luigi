@@ -393,3 +393,23 @@ class AutoNamespaceTest(LuigiTestCase):
             pass
         luigi.namespace(scope='incorrect_namespace')
         self.assertEqual(MyTask.get_task_namespace(), '')
+
+
+class GetParamValuesTest(LuigiTestCase):
+    this_module = 'task_test_params'
+
+    def test_get_param_values_from_class_inherit(self):
+        class BaseATask(luigi.Task):
+            aa = luigi.Parameter()
+
+        # class BaseATask(luigi.Task):
+        class BaseBTask(BaseATask):
+            bb = luigi.Parameter()
+
+        class MyExtendsTask(BaseBTask):
+            cc = luigi.Parameter()
+
+            def run(self):
+                pass
+
+        self.assertTrue(self.run_locally_split('MyExtendsTask --cc c --bb xxx --aa aa'))
