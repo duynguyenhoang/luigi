@@ -18,6 +18,7 @@ from helpers import LuigiTestCase, RunOnceTask
 
 import luigi
 import luigi.task
+from luigi.task import Parameter
 from luigi.util import inherits, requires
 
 
@@ -101,7 +102,7 @@ class BasicsTest(LuigiTestCase):
                             str(ChildTask.__mro__[1]))
 
     # following tests using requires decorator
-    def test_task_ids_using_requries(self):
+    def test_task_ids_using_requires(self):
         class ParentTask(luigi.Task):
             my_param = luigi.Parameter()
         luigi.namespace('blah')
@@ -114,7 +115,7 @@ class BasicsTest(LuigiTestCase):
         self.assertEqual(str(child_task), 'blah.ChildTask(my_param=hello)')
         self.assertIn(ParentTask(my_param='hello'), luigi.task.flatten(child_task.requires()))
 
-    def test_task_ids_using_requries_2(self):
+    def test_task_ids_using_requires_2(self):
         # Here we use this decorator in a unnormal way.
         # But it should still work.
         class ParentTask(luigi.Task):
@@ -165,12 +166,74 @@ class BasicsTest(LuigiTestCase):
             pass
 
         @requires(RequiredTask)
-        class ChildTask(ParentTask):
+        class ChildTaskInherited(ParentTask):
             pass
 
-        return ChildTask
+        return ChildTaskInherited
 
     def test_requires_has_effect_MRO(self):
         ChildTask = self._setup_requires_inheritence()
         self.assertNotEqual(str(ChildTask.__mro__[0]),
                             str(ChildTask.__mro__[1]))
+
+    def test_task_add_param_inherit_classes_no_params(self):
+        # ChildTaskInherited = self._setup_requires_inheritence()
+        class RequiredTask(luigi.Task):
+            pass
+
+        class ParentTask(luigi.Task):
+            pass
+
+        @requires(RequiredTask)
+        class ChildTaskInherited(ParentTask):
+            pass
+
+        self.assertEqual(len(ChildTaskInherited._inherit_classes), 0)
+
+    def test_task_add_param_extend_class_have_no_params(self):
+        class ParentTask(luigi.Task):
+            a = Parameter()
+
+        class ChildTaskInherited(ParentTask):
+            pass
+
+        self.assertEqual(len(ChildTaskInherited._inherit_classes), 0)
+
+    def test_task_add_param_inherit_classes_has_class_no_duplication_param(self):
+        class RequiredATask(luigi.Task):
+            a = Parameter()
+
+        class RequiredBTask(luigi.Task):
+            b = Parameter()
+
+        @requires(RequiredATask, RequiredBTask, RequiredBTask)
+        class ChildTaskSomeThing(luigi.Task):
+            c = Parameter()
+
+        self.assertEqual(len(ChildTaskSomeThing._inherit_classes), 2)
+
+    def test_task_add_param_inherit_classes_has_class_duplication_param(self):
+        class RequiredATask(luigi.Task):
+            a = Parameter()
+
+        class RequiredBTask(luigi.Task):
+            b = Parameter()
+
+        @requires(RequiredATask, RequiredBTask, RequiredBTask)
+        class ChildTaskSomeThing(luigi.Task):
+            b = Parameter()
+
+        self.assertEqual(len(ChildTaskSomeThing._inherit_classes), 1)
+
+    def test_task_add_param_inherit_classes_recursive(self):
+        class RequiredATask(luigi.Task):
+            a = Parameter()
+
+        class RequiredBTask(luigi.Task):
+            b = Parameter()
+
+        @requires(RequiredATask, RequiredBTask, RequiredBTask)
+        class ChildTaskSomeThing(luigi.Task):
+            b = Parameter()
+
+        self.assertEqual(len(ChildTaskSomeThing._inherit_classes), 1)

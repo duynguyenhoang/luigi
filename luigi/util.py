@@ -288,12 +288,20 @@ class inherits:
 
     def __call__(self, task_that_inherits):
         # Get all parameter objects from each of the underlying tasks
+        task_that_inherits._inherit_classes = set()
+
         for task_to_inherit in self.tasks_to_inherit:
+            has_inherit_param = False
             for param_name, param_obj in task_to_inherit.get_params():
                 # Check if the parameter exists in the inheriting task
                 if not hasattr(task_that_inherits, param_name):
                     # If not, add it to the inheriting task
                     setattr(task_that_inherits, param_name, param_obj)
+                    has_inherit_param = True
+
+            # Track all intehited classes
+            if has_inherit_param:
+                task_that_inherits._inherit_classes.add(task_to_inherit)
 
         # Modify task_that_inherits by adding methods
         def clone_parent(_self, **kwargs):

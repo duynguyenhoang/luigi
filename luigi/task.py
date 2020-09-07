@@ -169,6 +169,7 @@ class Task(metaclass=Register):
     """
 
     _event_callbacks = {}
+    _inherit_classes = set()
 
     #: Priority of the task: the scheduler should favor available
     #: tasks with higher priority values first.
@@ -187,6 +188,7 @@ class Task(metaclass=Register):
 
     #: Maximum number of tasks to run together as a batch. Infinite by default
     max_batch_size = float('inf')
+
 
     @property
     def batchable(self):
@@ -351,12 +353,31 @@ class Task(metaclass=Register):
             return "{}.{}".format(cls.get_task_namespace(), cls.__name__)
 
     @classmethod
+    def get_parent_param(cls, param_name):
+        """
+        Get all parent params from class inherit and @inherits/@requires
+        Note: Recursive?
+        """
+        parents = [c for c in cls.__bases__ if c.__base__.__class__ == Register]
+
+        for parent in parents + list(cls._inherit_classes):
+            params = [i for i in parent.get_params() if i[0] == param_name]
+            if not params:
+                continue
+            task_family = parent.get_task_family()
+
+            return params[0][1].task_value(task_family, param_name)
+
+        return None
+
+    @classmethod
     def get_params(cls):
         """
         Returns all of the Parameters for this Task.
         """
         # We want to do this here and not at class instantiation, or else there is no room to extend classes dynamically
         params = []
+
         for param_name in dir(cls):
             param_obj = getattr(cls, param_name)
             if not isinstance(param_obj, Parameter):
@@ -366,6 +387,7 @@ class Task(metaclass=Register):
 
         # The order the parameters are created matters. See Parameter class
         params.sort(key=lambda t: t[1]._counter)
+
         return params
 
     @classmethod
@@ -412,12 +434,18 @@ class Task(metaclass=Register):
                 raise parameter.UnknownParameterException('%s: unknown parameter %s' % (exc_desc, param_name))
             result[param_name] = params_dict[param_name].normalize(arg)
 
-        # Then use the defaults for anything not filled in
         for param_name, param_obj in params:
             if param_name not in result:
-                if not param_obj.has_task_value(task_family, param_name):
-                    raise parameter.MissingParameterException("%s: requires the '%s' parameter to be set" % (exc_desc, param_name))
-                result[param_name] = param_obj.task_value(task_family, param_name)
+                if param_obj.has_task_value(task_family, param_name):
+                    result[param_name] = param_obj.task_value(task_family, param_name)
+                else:
+                    parent_param = cls.get_parent_param(param_name)
+
+                    if parent_param:
+                        result[param_name] = parent_param
+                    else:
+                        print(cls._inherit_classes)
+                        raise parameter.MissingParameterException("%s: requires the '%s' parameter to be set" % (exc_desc, param_name))
 
         def list_to_tuple(x):
             """ Make tuples out of lists and sets to allow hashing """
