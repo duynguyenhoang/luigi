@@ -15,9 +15,12 @@
 # limitations under the License.
 #
 
+import os
 import doctest
 import pickle
 import warnings
+import tempfile
+import shutil
 
 from helpers import unittest, LuigiTestCase
 from datetime import datetime, timedelta
@@ -27,6 +30,7 @@ import luigi.task
 import luigi.util
 import collections
 from luigi.task_register import load_task
+from luigi.local_target import LocalTarget
 
 
 class DummyTask(luigi.Task):
@@ -398,6 +402,12 @@ class AutoNamespaceTest(LuigiTestCase):
 class GetParamValuesTest(LuigiTestCase):
     this_module = 'task_test_params'
 
+    def setUp(self):
+        self.tempdir = tempfile.mkdtemp(prefix='luigi-test-')
+
+    def tearDown(self):
+        shutil.rmtree(self.tempdir)
+
     def test_get_param_values_from_class_inherit(self):
         class BaseATask(luigi.Task):
             aa = luigi.Parameter()
@@ -413,3 +423,48 @@ class GetParamValuesTest(LuigiTestCase):
                 pass
 
         self.assertTrue(self.run_locally_split('MyExtendsTask --cc c --bb xxx --aa aa'))
+
+    def test_get_param_values_from_decorator_inherit(self):
+        tmp = self.tempdir
+
+        class BaseATask(luigi.Task):
+            aa = luigi.Parameter()
+
+            def __init__(self, *args, **kwargs):
+                super(BaseATask, self).__init__(*args, **kwargs)
+                self.output_path = os.path.join(tmp, "aa_test.output")
+
+            def output(self):
+                return LocalTarget(self.output_path)
+
+            def run(self):
+                open(self.output_path, 'a').close()
+
+        class BaseBTask(luigi.Task):
+            bb = luigi.Parameter()
+
+            def __init__(self, *args, **kwargs):
+                super(BaseBTask, self).__init__(*args, **kwargs)
+                self.output_path = os.path.join(tmp, "bb_test.output")
+
+            def output(self):
+                return LocalTarget(self.output_path)
+
+            def run(self):
+                open(self.output_path, 'a').close()
+
+        @luigi.util.requires(BaseATask, BaseBTask)
+        class MyRequiresTask(luigi.Task):
+            cc = luigi.Parameter()
+
+            def __init__(self, *args, **kwargs):
+                super(MyRequiresTask, self).__init__(*args, **kwargs)
+                self.output_path = os.path.join(tmp, "cc_test.output")
+
+            def output(self):
+                return LocalTarget(self.output_path)
+
+            def run(self):
+                open(self.output_path, 'a').close()
+
+        self.assertTrue(self.run_locally_split('MyRequiresTask --cc cc --bb xxx --BaseATask.aa aa'))
